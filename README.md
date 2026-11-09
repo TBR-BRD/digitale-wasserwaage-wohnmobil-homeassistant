@@ -17,11 +17,13 @@ Fahrzeug: Benimar Tessoro 488 (Ford Transit, Radstand 395 cm) – alle Werte sin
 - Farben: grün = waagerecht, orange = Keile nötig, rot = höher als die Keile reichen
 - Nur „anheben“ (Nivellieren mit Keilen)
 - **Konfiguration der Fahrzeugwerte** direkt im Karten-Editor von Home Assistant
-- **Simulator-Webseite** zum Ausprobieren ohne Hardware
+- **[Simulator-Webseite](https://tbr-brd.github.io/digitale-wasserwaage-wohnmobil-homeassistant/simulator/)** zum Ausprobieren ohne Hardware
 
 ## Simulator
 
-[`simulator/index.html`](simulator/index.html) herunterladen und im Browser öffnen – läuft komplett offline.
+👉 **[Simulator online testen](https://tbr-brd.github.io/digitale-wasserwaage-wohnmobil-homeassistant/simulator/)**
+
+Läuft komplett im Browser, auch offline: [`simulator/index.html`](simulator/index.html) herunterladen und öffnen.
 
 - Neigung per Regler simulieren, inkl. „Leute laufen im Womo“ (Wackeln)
 - Wohnmobil konfigurieren: Radstand, Spurbreite, höchste Keilstufe, Toleranz, Darstellung
