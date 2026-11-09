@@ -24,6 +24,8 @@ const DEFAULTS = {
   default_view: "overview",
 };
 
+const NUMERIC_KEYS = ["wheelbase", "track", "tolerance", "max_wedge", "min_lift", "exaggerate", "bubble_range"];
+
 const fmt = (v, d = 1) =>
   Number(v).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -61,6 +63,16 @@ class WomoLevelCard extends HTMLElement {
     this._last = "";
   }
 
+  static async getConfigElement() {
+    // sorgt dafür, dass ha-form und Entitäten-Auswahl geladen sind
+    try {
+      const helpers = await window.loadCardHelpers();
+      const c = await helpers.createCardElement({ type: "entities", entities: [] });
+      await c.constructor.getConfigElement();
+    } catch (e) { /* ältere HA-Versionen */ }
+    return document.createElement("womo-level-card-editor");
+  }
+
   static getStubConfig() {
     return {
       pitch_entity: "sensor.womo_level_neigung_laengs",
@@ -75,6 +87,12 @@ class WomoLevelCard extends HTMLElement {
       throw new Error("pitch_entity und roll_entity müssen angegeben werden");
     }
     this._cfg = { ...DEFAULTS, ...config };
+    for (const k of NUMERIC_KEYS) {
+      const v = Number(this._cfg[k]);
+      this._cfg[k] = isFinite(v) ? v : DEFAULTS[k];
+    }
+    if (this._cfg.exaggerate <= 0) this._cfg.exaggerate = DEFAULTS.exaggerate;
+    if (this._cfg.bubble_range <= 0) this._cfg.bubble_range = DEFAULTS.bubble_range;
     this._view = this._view || this._cfg.default_view;
     this._last = "";
     if (this._hass) this._render();
@@ -357,6 +375,109 @@ const STYLE = `
   .status.red { background: var(--wl-red); }
   .na { padding:30px; text-align:center; color: var(--secondary-text-color); }
 `;
+
+/* ---------- Einstellungs-Editor für Home Assistant ---------- */
+
+const num = (min, max, step, unit) => ({
+  number: { min, max, step, mode: "box", unit_of_measurement: unit },
+});
+
+const EDITOR_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  {
+    type: "expandable", title: "Sensoren", flatten: true, expanded: true,
+    schema: [
+      { name: "pitch_entity", required: true, selector: { entity: { domain: "sensor" } } },
+      { name: "roll_entity", required: true, selector: { entity: { domain: "sensor" } } },
+      { name: "invert_pitch", selector: { boolean: {} } },
+      { name: "invert_roll", selector: { boolean: {} } },
+    ],
+  },
+  {
+    type: "expandable", title: "Wohnmobil", flatten: true, expanded: true,
+    schema: [
+      { name: "wheelbase", selector: num(150, 700, 1, "cm") },
+      { name: "track", selector: num(100, 260, 1, "cm") },
+    ],
+  },
+  {
+    type: "expandable", title: "Keile & Toleranz", flatten: true,
+    schema: [
+      { name: "max_wedge", selector: num(1, 30, 0.5, "cm") },
+      { name: "min_lift", selector: num(0, 5, 0.1, "cm") },
+      { name: "tolerance", selector: num(0, 3, 0.1, "°") },
+    ],
+  },
+  {
+    type: "expandable", title: "Darstellung", flatten: true,
+    schema: [
+      { name: "default_view", selector: { select: { mode: "dropdown", options: [
+        { value: "overview", label: "Rück- & Seitenansicht" },
+        { value: "top", label: "Draufsicht" },
+      ] } } },
+      { name: "exaggerate", selector: num(1, 10, 0.5, "x") },
+      { name: "bubble_range", selector: num(0.5, 10, 0.5, "°") },
+    ],
+  },
+];
+
+const EDITOR_LABELS = {
+  title: "Titel",
+  pitch_entity: "Sensor Längsneigung",
+  roll_entity: "Sensor Querneigung",
+  invert_pitch: "Längsneigung umkehren",
+  invert_roll: "Querneigung umkehren",
+  wheelbase: "Radstand",
+  track: "Spurbreite",
+  max_wedge: "Höchste Keilstufe",
+  min_lift: "Kleinste angezeigte Keilhöhe",
+  tolerance: "Toleranz „waagerecht“",
+  default_view: "Startansicht",
+  exaggerate: "Neigung im Bild übertreiben",
+  bubble_range: "Blase am Rand ab",
+};
+
+const EDITOR_HELPERS = {
+  invert_pitch: "Einschalten, wenn bei höherer Front ein negativer Wert kommt",
+  invert_roll: "Einschalten, wenn bei höherer rechter Seite ein negativer Wert kommt",
+  wheelbase: "Abstand Vorder- zu Hinterachse (Tessoro 488: 395 cm)",
+  track: "Abstand Reifenmitte links zu rechts an der Hinterachse",
+};
+
+class WomoLevelCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = config;
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  _render() {
+    if (!this._hass || !this._config) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (s) => EDITOR_LABELS[s.name] || s.name;
+      this._form.computeHelper = (s) => EDITOR_HELPERS[s.name];
+      this._form.addEventListener("value-changed", (ev) => {
+        this._config = ev.detail.value;
+        this.dispatchEvent(new CustomEvent("config-changed", {
+          detail: { config: this._config }, bubbles: true, composed: true,
+        }));
+      });
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass;
+    this._form.schema = EDITOR_SCHEMA;
+    this._form.data = { ...DEFAULTS, ...this._config };
+  }
+}
+
+if (!customElements.get("womo-level-card-editor")) {
+  customElements.define("womo-level-card-editor", WomoLevelCardEditor);
+}
 
 customElements.define("womo-level-card", WomoLevelCard);
 window.customCards = window.customCards || [];

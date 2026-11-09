@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Womo-Wasserwaage – Simulator</title>
+<style>
+  :root { --primary-text-color:#1f2328; --secondary-text-color:#6b7280; --primary-color:#0a84ff;
+          --card-bg:#fff; --page-bg:#f2f2f6; --line:#e3e3e8; --field:#f7f7fa; }
+  body.dark { --primary-text-color:#e6e6e6; --secondary-text-color:#9a9aa2; --card-bg:#1c1c1e;
+              --page-bg:#0e0e10; --line:#2c2c30; --field:#26262a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page-bg); color:var(--primary-text-color);
+         font-family:-apple-system, BlinkMacSystemFont, Roboto, "Segoe UI", sans-serif; font-size:15px; }
+  header { max-width:980px; margin:0 auto; padding:22px 16px 6px; }
+  header h1 { font-size:22px; margin:0 0 4px; }
+  header p { margin:0; color:var(--secondary-text-color); line-height:1.45; }
+  .grid { max-width:980px; margin:0 auto; padding:12px 16px 24px; display:grid; gap:16px;
+          grid-template-columns: minmax(0,1fr) minmax(0,420px); align-items:start; }
+  @media (max-width:820px) { .grid { grid-template-columns:1fr; } .cardcol { order:-1; } }
+  .box { background:var(--card-bg); border-radius:12px; padding:14px 16px; margin-bottom:16px;
+         box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .box h2 { font-size:15px; margin:0 0 10px; }
+  .cardcol { position:sticky; top:12px; }
+  ha-card { display:block; background:var(--card-bg); border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .slider { display:flex; align-items:center; gap:10px; margin:8px 0; }
+  .slider span { width:52px; }
+  .slider input { flex:1; }
+  .slider output { width:56px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  button { border:1px solid var(--line); background:var(--field); color:inherit; border-radius:8px;
+           padding:7px 11px; font:inherit; font-size:14px; cursor:pointer; }
+  button.primary { background:var(--primary-color); border-color:var(--primary-color); color:#fff; }
+  .fields { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+  @media (max-width:480px) { .fields { grid-template-columns:1fr; } }
+  .fields .full { grid-column:1/-1; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--secondary-text-color); }
+  label.f input, label.f select { font:inherit; font-size:15px; color:var(--primary-text-color);
+    background:var(--field); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .unit { position:relative; }
+  .unit input { width:100%; padding-right:34px; }
+  input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+  .unit em { position:absolute; right:10px; top:50%; transform:translateY(-50%); font-style:normal;
+             color:var(--secondary-text-color); font-size:13px; }
+  .hint { font-size:12px; color:var(--secondary-text-color); margin-top:2px; }
+  label.chk { display:flex; align-items:center; gap:8px; font-size:14px; }
+  fieldset { border:none; padding:0; margin:14px 0 0; }
+  legend { font-weight:600; font-size:13px; margin-bottom:8px; padding:0; }
+  pre { background:var(--field); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+        font-size:12.5px; overflow:auto; margin:0 0 10px; }
+  .links a { color:var(--primary-color); text-decoration:none; }
+  .links li { margin:4px 0; }
+  .links ul { margin:6px 0 0; padding-left:18px; }
+  #copied { color:var(--secondary-text-color); font-size:13px; margin-left:6px; }
+  footer { max-width:980px; margin:0 auto; padding:0 16px 30px; color:var(--secondary-text-color); font-size:13px; }
+</style></head>
+<body>
+<header>
+  <h1>Digitale Wasserwaage fürs Wohnmobil – Simulator</h1>
+  <p>Die Home-Assistant-Karte zum Ausprobieren: Neigung mit den Reglern simulieren und die Werte für dein Wohnmobil einstellen. Unten gibt es den fertigen YAML-Code für Home Assistant.</p>
+</header>
+
+<div class="grid">
+  <div>
+    <div class="box">
+      <h2>Neigung simulieren</h2>
+      <div class="slider"><span>Längs</span><input id="p" type="range" min="-5" max="5" step="0.1" value="-0.6"><output id="po"></output></div>
+      <div class="slider"><span>Quer</span><input id="r" type="range" min="-5" max="5" step="0.1" value="1.1"><output id="ro"></output></div>
+      <div class="hint">Längs + = Front höher · Quer + = rechte Seite höher</div>
+      <div class="btns">
+        <button data-p="0" data-r="0">Waagerecht</button>
+        <button data-p="-0.6" data-r="1.1">Typischer Stellplatz</button>
+        <button data-p="1.8" data-r="0.2">Front zu hoch</button>
+        <button data-p="2.5" data-r="-3">Zu steil</button>
+        <button id="wobble">Leute laufen im Womo</button>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>Wohnmobil konfigurieren</h2>
+      <div class="fields">
+        <label class="f full">Vorlage
+          <select id="preset">
+            <option value="tessoro488">Benimar Tessoro 488 (Ford Transit)</option>
+            <option value="custom">Eigene Werte</option>
+          </select>
+        </label>
+        <label class="f full">Name auf der Karte
+          <input id="title" type="text">
+        </label>
+      </div>
+
+      <fieldset><legend>Fahrzeug</legend>
+        <div class="fields">
+          <label class="f">Radstand
+            <span class="unit"><input id="wheelbase" type="number" min="150" max="700" step="1"><em>cm</em></span>
+            <span class="hint">Vorderachse bis Hinterachse</span>
+          </label>
+          <label class="f">Spurbreite
+            <span class="unit"><input id="track" type="number" min="100" max="260" step="1"><em>cm</em></span>
+            <span class="hint">Reifenmitte links bis rechts</span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>Keile &amp; Toleranz</legend>
+        <div class="fields">
+          <label class="f">Höchste Keilstufe
+            <span class="unit"><input id="max_wedge" type="number" min="1" max="30" step="0.5"><em>cm</em></span>
+          </label>
+          <label class="f">Kleinste angezeigte Höhe
+            <span class="unit"><input id="min_lift" type="number" min="0" max="5" step="0.1"><em>cm</em></span>
+          </label>
+          <label class="f">Gilt als waagerecht bis
+            <span class="unit"><input id="tolerance" type="number" min="0" max="3" step="0.1"><em>°</em></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>Darstellung</legend>
+        <div class="fields">
+          <label class="f">Startansicht
+            <select id="default_view">
+              <option value="overview">Rück- &amp; Seitenansicht</option>
+              <option value="top">Draufsicht</option>
+            </select>
+          </label>
+          <label class="f">Neigung im Bild übertreiben
+            <span class="unit"><input id="exaggerate" type="number" min="1" max="10" step="0.5"><em>x</em></span>
+          </label>
+          <label class="f">Blase am Rand ab
+            <span class="unit"><input id="bubble_range" type="number" min="0.5" max="10" step="0.5"><em>°</em></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>Sensor-Ausrichtung</legend>
+        <label class="chk"><input id="invert_pitch" type="checkbox"> Längsneigung umkehren</label>
+        <label class="chk"><input id="invert_roll" type="checkbox"> Querneigung umkehren</label>
+      </fieldset>
+
+      <div class="btns" style="margin-top:14px"><button id="reset">Auf Vorlage zurücksetzen</button></div>
+    </div>
+
+    <div class="box">
+      <h2>YAML für Home Assistant</h2>
+      <pre id="yaml"></pre>
+      <button class="primary" id="copy">Kopieren</button><span id="copied"></span>
+      <div class="hint" style="margin-top:8px">In Home Assistant: Dashboard bearbeiten → Karte hinzufügen → „Manuell“ → einfügen. Alle Werte lassen sich dort auch im Karten-Editor ändern.</div>
+    </div>
+
+    <div class="box links">
+      <h2>Weitere Projekte</h2>
+      <ul>
+        <li><a href="https://www.lets-make.de">lets-make.de</a> – Übersicht aller Projekte</li>
+        <li><a href="https://github.com/TBR-BRD/wohnmobil-touren-homeassistant">Wohnmobil-Touren für Home Assistant</a> – Reisen aus GPS-Daten auf der Karte</li>
+        <li><a href="https://github.com/TBR-BRD/gewitterwarner-gw1-shelly-uni-homeassistant">Gewitterwarner</a> – Gewitterwarnung über Shelly UNI</li>
+        <li><a href="https://github.com/TBR-BRD/ha-round-pv-weather-display">Rundes PV- &amp; Wetter-Display</a> – ESP32-Display für Home Assistant</li>
+        <li><a href="https://github.com/TBR-BRD">Alle Projekte auf GitHub</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cardcol">
+    <womo-level-card id="card"></womo-level-card>
+    <div class="btns" style="justify-content:center"><button id="dark">Hell / Dunkel</button></div>
+  </div>
+</div>
+
+<footer>Thoralf Brandt · <a href="https://www.lets-make.de" style="color:inherit">lets-make.de</a></footer>
+
+<script>
+customElements.define("ha-card", class extends HTMLElement {});
+/*CARD*/
+
+const PRESETS = {
+  tessoro488: { title: "Benimar Tessoro 488", wheelbase: 395, track: 170 },
+};
+const BASE = { max_wedge: 10, min_lift: 0.5, tolerance: 0.3, default_view: "overview",
+               exaggerate: 4, bubble_range: 3, invert_pitch: false, invert_roll: false };
+const NUMS = ["wheelbase","track","max_wedge","min_lift","tolerance","exaggerate","bubble_range"];
+const KEY = "womo-level-sim-config";
+
+const $ = (id) => document.getElementById(id);
+const card = $("card");
+let cfg;
+
+function load() {
+  try { const s = localStorage.getItem(KEY); if (s) return JSON.parse(s); } catch (e) {}
+  return { preset: "tessoro488", ...BASE, ...PRESETS.tessoro488 };
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} }
+
+function fillForm() {
+  $("preset").value = cfg.preset || "custom";
+  for (const k of ["title","default_view",...NUMS]) $(k).value = cfg[k];
+  $("invert_pitch").checked = !!cfg.invert_pitch;
+  $("invert_roll").checked = !!cfg.invert_roll;
+}
+
+function readForm() {
+  cfg.title = $("title").value;
+  cfg.default_view = $("default_view").value;
+  for (const k of NUMS) { const v = parseFloat($(k).value); if (isFinite(v)) cfg[k] = v; }
+  cfg.invert_pitch = $("invert_pitch").checked;
+  cfg.invert_roll = $("invert_roll").checked;
+  const p = PRESETS[cfg.preset];
+  if (p && (cfg.wheelbase !== p.wheelbase || cfg.track !== p.track)) { cfg.preset = "custom"; $("preset").value = "custom"; }
+}
+
+function yaml() {
+  const lines = [
+    "type: custom:womo-level-card",
+    `title: ${cfg.title || "Wasserwaage"}`,
+    "pitch_entity: sensor.womo_level_neigung_laengs",
+    "roll_entity: sensor.womo_level_neigung_quer",
+    `wheelbase: ${cfg.wheelbase}`,
+    `track: ${cfg.track}`,
+    `max_wedge: ${cfg.max_wedge}`,
+    `min_lift: ${cfg.min_lift}`,
+    `tolerance: ${cfg.tolerance}`,
+    `default_view: ${cfg.default_view}`,
+    `exaggerate: ${cfg.exaggerate}`,
+    `bubble_range: ${cfg.bubble_range}`,
+  ];
+  if (cfg.invert_pitch) lines.push("invert_pitch: true");
+  if (cfg.invert_roll) lines.push("invert_roll: true");
+  return lines.join("\n");
+}
+
+function applyConfig() {
+  const { preset, ...c } = cfg;
+  card.setConfig({ pitch_entity: "sensor.p", roll_entity: "sensor.r", ...c });
+  $("yaml").textContent = yaml();
+  save();
+  updAngles();
+}
+
+const p = $("p"), r = $("r");
+let wobble = null, base = null;
+function updAngles(dp = 0, dr = 0) {
+  const pv = (+p.value + dp).toFixed(2), rv = (+r.value + dr).toFixed(2);
+  $("po").textContent = Number(p.value).toFixed(1) + "°";
+  $("ro").textContent = Number(r.value).toFixed(1) + "°";
+  card.hass = { states: { "sensor.p": { state: pv }, "sensor.r": { state: rv } } };
+}
+p.oninput = r.oninput = () => updAngles();
+document.querySelectorAll("button[data-p]").forEach((b) => b.onclick = () => { p.value = b.dataset.p; r.value = b.dataset.r; updAngles(); });
+$("wobble").onclick = () => {
+  if (wobble) { clearInterval(wobble); wobble = null; $("wobble").textContent = "Leute laufen im Womo"; updAngles(); return; }
+  $("wobble").textContent = "Stillstehen";
+  wobble = setInterval(() => updAngles((Math.random() - .5) * .5, (Math.random() - .5) * .7), 300);
+};
+
+$("preset").onchange = () => {
+  cfg.preset = $("preset").value;
+  if (PRESETS[cfg.preset]) Object.assign(cfg, PRESETS[cfg.preset]);
+  fillForm(); applyConfig();
+};
+document.querySelectorAll(".box input, .box select").forEach((el) => {
+  if (el.id === "p" || el.id === "r" || el.id === "preset") return;
+  el.addEventListener("input", () => { readForm(); applyConfig(); });
+});
+$("reset").onclick = () => {
+  const key = PRESETS[cfg.preset] ? cfg.preset : "tessoro488";
+  cfg = { preset: key, ...BASE, ...PRESETS[key] }; fillForm(); applyConfig();
+};
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(yaml()); $("copied").textContent = "Kopiert ✓"; }
+  catch (e) {
+    const range = document.createRange(); range.selectNodeContents($("yaml"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    $("copied").textContent = "Markiert – jetzt mit Cmd/Strg+C kopieren";
+  }
+  setTimeout(() => $("copied").textContent = "", 3000);
+};
+if (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) document.body.classList.add("dark");
+$("dark").onclick = () => document.body.classList.toggle("dark");
+
+cfg = load();
+fillForm();
+applyConfig();
+</script>
+</body></html>

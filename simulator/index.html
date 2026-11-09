@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Womo-Wasserwaage – Simulator</title>
+<style>
+  :root { --primary-text-color:#1f2328; --secondary-text-color:#6b7280; --primary-color:#0a84ff;
+          --card-bg:#fff; --page-bg:#f2f2f6; --line:#e3e3e8; --field:#f7f7fa; }
+  body.dark { --primary-text-color:#e6e6e6; --secondary-text-color:#9a9aa2; --card-bg:#1c1c1e;
+              --page-bg:#0e0e10; --line:#2c2c30; --field:#26262a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page-bg); color:var(--primary-text-color);
+         font-family:-apple-system, BlinkMacSystemFont, Roboto, "Segoe UI", sans-serif; font-size:15px; }
+  header { max-width:980px; margin:0 auto; padding:22px 16px 6px; }
+  header h1 { font-size:22px; margin:0 0 4px; }
+  header p { margin:0; color:var(--secondary-text-color); line-height:1.45; }
+  .grid { max-width:980px; margin:0 auto; padding:12px 16px 24px; display:grid; gap:16px;
+          grid-template-columns: minmax(0,1fr) minmax(0,420px); align-items:start; }
+  @media (max-width:820px) { .grid { grid-template-columns:1fr; } .cardcol { order:-1; } }
+  .box { background:var(--card-bg); border-radius:12px; padding:14px 16px; margin-bottom:16px;
+         box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .box h2 { font-size:15px; margin:0 0 10px; }
+  .cardcol { position:sticky; top:12px; }
+  ha-card { display:block; background:var(--card-bg); border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .slider { display:flex; align-items:center; gap:10px; margin:8px 0; }
+  .slider span { width:52px; }
+  .slider input { flex:1; }
+  .slider output { width:56px; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  button { border:1px solid var(--line); background:var(--field); color:inherit; border-radius:8px;
+           padding:7px 11px; font:inherit; font-size:14px; cursor:pointer; }
+  button.primary { background:var(--primary-color); border-color:var(--primary-color); color:#fff; }
+  .fields { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+  @media (max-width:480px) { .fields { grid-template-columns:1fr; } }
+  .fields .full { grid-column:1/-1; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--secondary-text-color); }
+  label.f input, label.f select { font:inherit; font-size:15px; color:var(--primary-text-color);
+    background:var(--field); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .unit { position:relative; }
+  .unit input { width:100%; padding-right:34px; }
+  input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+  .unit em { position:absolute; right:10px; top:50%; transform:translateY(-50%); font-style:normal;
+             color:var(--secondary-text-color); font-size:13px; }
+  .hint { font-size:12px; color:var(--secondary-text-color); margin-top:2px; }
+  label.chk { display:flex; align-items:center; gap:8px; font-size:14px; }
+  fieldset { border:none; padding:0; margin:14px 0 0; }
+  legend { font-weight:600; font-size:13px; margin-bottom:8px; padding:0; }
+  pre { background:var(--field); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+        font-size:12.5px; overflow:auto; margin:0 0 10px; }
+  .links a { color:var(--primary-color); text-decoration:none; }
+  .links li { margin:4px 0; }
+  .links ul { margin:6px 0 0; padding-left:18px; }
+  #copied { color:var(--secondary-text-color); font-size:13px; margin-left:6px; }
+  footer { max-width:980px; margin:0 auto; padding:0 16px 30px; color:var(--secondary-text-color); font-size:13px; }
+</style></head>
+<body>
+<header>
+  <h1>Digitale Wasserwaage fürs Wohnmobil – Simulator</h1>
+  <p>Die Home-Assistant-Karte zum Ausprobieren: Neigung mit den Reglern simulieren und die Werte für dein Wohnmobil einstellen. Unten gibt es den fertigen YAML-Code für Home Assistant.</p>
+</header>
+
+<div class="grid">
+  <div>
+    <div class="box">
+      <h2>Neigung simulieren</h2>
+      <div class="slider"><span>Längs</span><input id="p" type="range" min="-5" max="5" step="0.1" value="-0.6"><output id="po"></output></div>
+      <div class="slider"><span>Quer</span><input id="r" type="range" min="-5" max="5" step="0.1" value="1.1"><output id="ro"></output></div>
+      <div class="hint">Längs + = Front höher · Quer + = rechte Seite höher</div>
+      <div class="btns">
+        <button data-p="0" data-r="0">Waagerecht</button>
+        <button data-p="-0.6" data-r="1.1">Typischer Stellplatz</button>
+        <button data-p="1.8" data-r="0.2">Front zu hoch</button>
+        <button data-p="2.5" data-r="-3">Zu steil</button>
+        <button id="wobble">Leute laufen im Womo</button>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>Wohnmobil konfigurieren</h2>
+      <div class="fields">
+        <label class="f full">Vorlage
+          <select id="preset">
+            <option value="tessoro488">Benimar Tessoro 488 (Ford Transit)</option>
+            <option value="custom">Eigene Werte</option>
+          </select>
+        </label>
+        <label class="f full">Name auf der Karte
+          <input id="title" type="text">
+        </label>
+      </div>
+
+      <fieldset><legend>Fahrzeug</legend>
+        <div class="fields">
+          <label class="f">Radstand
+            <span class="unit"><input id="wheelbase" type="number" min="150" max="700" step="1"><em>cm</em></span>
+            <span class="hint">Vorderachse bis Hinterachse</span>
+          </label>
+          <label class="f">Spurbreite
+            <span class="unit"><input id="track" type="number" min="100" max="260" step="1"><em>cm</em></span>
+            <span class="hint">Reifenmitte links bis rechts</span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>Keile &amp; Toleranz</legend>
+        <div class="fields">
+          <label class="f">Höchste Keilstufe
+            <span class="unit"><input id="max_wedge" type="number" min="1" max="30" step="0.5"><em>cm</em></span>
+          </label>
+          <label class="f">Kleinste angezeigte Höhe
+            <span class="unit"><input id="min_lift" type="number" min="0" max="5" step="0.1"><em>cm</em></span>
+          </label>
+          <label class="f">Gilt als waagerecht bis
+            <span class="unit"><input id="tolerance" type="number" min="0" max="3" step="0.1"><em>°</em></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>Darstellung</legend>
+        <div class="fields">
+          <label class="f">Startansicht
+            <select id="default_view">
+              <option value="overview">Rück- &amp; Seitenansicht</option>
+              <option value="top">Draufsicht</option>
+            </select>
+          </label>
+          <label class="f">Neigung im Bild übertreiben
+            <span class="unit"><input id="exaggerate" type="number" min="1" max="10" step="0.5"><em>x</em></span>
+          </label>
+          <label class="f">Blase am Rand ab
+            <span class="unit"><input id="bubble_range" type="number" min="0.5" max="10" step="0.5"><em>°</em></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>Sensor-Ausrichtung</legend>
+        <label class="chk"><input id="invert_pitch" type="checkbox"> Längsneigung umkehren</label>
+        <label class="chk"><input id="invert_roll" type="checkbox"> Querneigung umkehren</label>
+      </fieldset>
+
+      <div class="btns" style="margin-top:14px"><button id="reset">Auf Vorlage zurücksetzen</button></div>
+    </div>
+
+    <div class="box">
+      <h2>YAML für Home Assistant</h2>
+      <pre id="yaml"></pre>
+      <button class="primary" id="copy">Kopieren</button><span id="copied"></span>
+      <div class="hint" style="margin-top:8px">In Home Assistant: Dashboard bearbeiten → Karte hinzufügen → „Manuell“ → einfügen. Alle Werte lassen sich dort auch im Karten-Editor ändern.</div>
+    </div>
+
+    <div class="box links">
+      <h2>Weitere Projekte</h2>
+      <ul>
+        <li><a href="https://www.lets-make.de">lets-make.de</a> – Übersicht aller Projekte</li>
+        <li><a href="https://github.com/TBR-BRD/wohnmobil-touren-homeassistant">Wohnmobil-Touren für Home Assistant</a> – Reisen aus GPS-Daten auf der Karte</li>
+        <li><a href="https://github.com/TBR-BRD/gewitterwarner-gw1-shelly-uni-homeassistant">Gewitterwarner</a> – Gewitterwarnung über Shelly UNI</li>
+        <li><a href="https://github.com/TBR-BRD/ha-round-pv-weather-display">Rundes PV- &amp; Wetter-Display</a> – ESP32-Display für Home Assistant</li>
+        <li><a href="https://github.com/TBR-BRD">Alle Projekte auf GitHub</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cardcol">
+    <womo-level-card id="card"></womo-level-card>
+    <div class="btns" style="justify-content:center"><button id="dark">Hell / Dunkel</button></div>
+  </div>
+</div>
+
+<footer>Thoralf Brandt · <a href="https://www.lets-make.de" style="color:inherit">lets-make.de</a></footer>
+
+<script>
+customElements.define("ha-card", class extends HTMLElement {});
+/*
+ * womo-level-card – Wasserwaage für Wohnmobile in Home Assistant
+ * Ansichten: Übersicht (Rück- + Seitenansicht) und Draufsicht
+ *
+ * Konvention der Sensoren:
+ *   Längsneigung (pitch)  > 0  => Front steht höher
+ *   Querneigung  (roll)   > 0  => rechte Seite (in Fahrtrichtung) steht höher
+ * Falls dein Sensor andersherum misst: invert_pitch / invert_roll: true
+ *
+ * Nivelliert wird nur mit Keilen => es wird ausschließlich "anheben" angezeigt.
+ */
+
+const DEFAULTS = {
+  title: "Wasserwaage",
+  wheelbase: 395,     // cm, Benimar Tessoro 488 (Ford Transit)
+  track: 170,         // cm, Spurbreite (bitte nachmessen)
+  tolerance: 0.3,     // Grad – innerhalb gilt "waagerecht"
+  max_wedge: 10,      // cm – höchste Stufe deiner Keile
+  min_lift: 0.5,      // cm – kleinere Werte werden ignoriert
+  exaggerate: 4,      // Neigung im Bild x-fach übertreiben
+  bubble_range: 3,    // Grad bis die Blase am Rand ist
+  invert_pitch: false,
+  invert_roll: false,
+  default_view: "overview",
+};
+
+const NUMERIC_KEYS = ["wheelbase", "track", "tolerance", "max_wedge", "min_lift", "exaggerate", "bubble_range"];
+
+const fmt = (v, d = 1) =>
+  Number(v).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+const rad = (deg) => (deg * Math.PI) / 180;
+
+/* Rechnet aus Neigung die nötige Keilhöhe je Rad (nur anheben). */
+function computeLevel(pitch, roll, cfg) {
+  const L = cfg.wheelbase, T = cfg.track;
+  const tp = Math.tan(rad(pitch)), tr = Math.tan(rad(roll));
+  const z = {
+    fl: (L / 2) * tp - (T / 2) * tr,
+    fr: (L / 2) * tp + (T / 2) * tr,
+    rl: (-L / 2) * tp - (T / 2) * tr,
+    rr: (-L / 2) * tp + (T / 2) * tr,
+  };
+  const top = Math.max(...Object.values(z));
+  const lift = {};
+  for (const k in z) lift[k] = top - z[k];
+  return {
+    lift,
+    rollLift: T * Math.abs(tr),   // Rückansicht: tiefe Seite anheben
+    pitchLift: L * Math.abs(tp),  // Seitenansicht: tiefes Ende anheben
+    level: Math.abs(pitch) <= cfg.tolerance && Math.abs(roll) <= cfg.tolerance,
+    tooSteep: top - Math.min(...Object.values(z)) > cfg.max_wedge,
+  };
+}
+
+const WHEEL_NAMES = { fl: "Vorne links", fr: "Vorne rechts", rl: "Hinten links", rr: "Hinten rechts" };
+
+class WomoLevelCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._view = null;
+    this._last = "";
+  }
+
+  static async getConfigElement() {
+    // sorgt dafür, dass ha-form und Entitäten-Auswahl geladen sind
+    try {
+      const helpers = await window.loadCardHelpers();
+      const c = await helpers.createCardElement({ type: "entities", entities: [] });
+      await c.constructor.getConfigElement();
+    } catch (e) { /* ältere HA-Versionen */ }
+    return document.createElement("womo-level-card-editor");
+  }
+
+  static getStubConfig() {
+    return {
+      pitch_entity: "sensor.womo_level_neigung_laengs",
+      roll_entity: "sensor.womo_level_neigung_quer",
+      wheelbase: 395,
+      track: 170,
+    };
+  }
+
+  setConfig(config) {
+    if (!config.pitch_entity || !config.roll_entity) {
+      throw new Error("pitch_entity und roll_entity müssen angegeben werden");
+    }
+    this._cfg = { ...DEFAULTS, ...config };
+    for (const k of NUMERIC_KEYS) {
+      const v = Number(this._cfg[k]);
+      this._cfg[k] = isFinite(v) ? v : DEFAULTS[k];
+    }
+    if (this._cfg.exaggerate <= 0) this._cfg.exaggerate = DEFAULTS.exaggerate;
+    if (this._cfg.bubble_range <= 0) this._cfg.bubble_range = DEFAULTS.bubble_range;
+    this._view = this._view || this._cfg.default_view;
+    this._last = "";
+    if (this._hass) this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    const p = hass.states[this._cfg.pitch_entity];
+    const r = hass.states[this._cfg.roll_entity];
+    const key = `${p && p.state}|${r && r.state}|${this._view}`;
+    if (key === this._last) return;
+    this._last = key;
+    this._render();
+  }
+
+  getCardSize() {
+    return 8;
+  }
+
+  _readAngles() {
+    const s = (id) => this._hass && this._hass.states[id];
+    const p = s(this._cfg.pitch_entity), r = s(this._cfg.roll_entity);
+    const pv = p ? parseFloat(p.state) : NaN;
+    const rv = r ? parseFloat(r.state) : NaN;
+    if (isNaN(pv) || isNaN(rv)) return null;
+    return {
+      pitch: this._cfg.invert_pitch ? -pv : pv,
+      roll: this._cfg.invert_roll ? -rv : rv,
+    };
+  }
+
+  _render() {
+    if (!this._cfg || !this._hass) return;
+    const a = this._readAngles();
+    const c = this._cfg;
+
+    let body;
+    if (!a) {
+      body = `<div class="na">Sensor nicht verfügbar</div>`;
+    } else {
+      const res = computeLevel(a.pitch, a.roll, c);
+      body =
+        (this._view === "top" ? this._topView(a, res) : this._overview(a, res)) +
+        this._status(res);
+    }
+
+    this.shadowRoot.innerHTML = `
+      <style>${STYLE}</style>
+      <ha-card>
+        <div class="head">
+          <span class="title">${c.title}</span>
+        </div>
+        <div class="tabs">
+          <button data-v="overview" class="${this._view !== "top" ? "on" : ""}">Rück- & Seitenansicht</button>
+          <button data-v="top" class="${this._view === "top" ? "on" : ""}">Draufsicht</button>
+        </div>
+        ${body}
+      </ha-card>`;
+
+    this.shadowRoot.querySelectorAll(".tabs button").forEach((b) =>
+      b.addEventListener("click", () => {
+        this._view = b.dataset.v;
+        this._last = "";
+        this._render();
+      })
+    );
+  }
+
+  _color(res, liftCm) {
+    if (liftCm !== undefined) {
+      if (liftCm > this._cfg.max_wedge) return "var(--wl-red)";
+      return liftCm < this._cfg.min_lift ? "var(--wl-green)" : "var(--wl-orange)";
+    }
+    if (res.tooSteep) return "var(--wl-red)";
+    return res.level ? "var(--wl-green)" : "var(--wl-orange)";
+  }
+
+  /* ---------- Rück- und Seitenansicht ---------- */
+  _overview(a, res) {
+    const c = this._cfg;
+    const clampVis = (deg) => Math.max(-14, Math.min(14, deg * c.exaggerate));
+
+    const rollOk = Math.abs(a.roll) <= c.tolerance;
+    const pitchOk = Math.abs(a.pitch) <= c.tolerance;
+    const rollCol = res.tooSteep ? "var(--wl-red)" : rollOk ? "var(--wl-green)" : "var(--wl-orange)";
+    const pitchCol = res.tooSteep ? "var(--wl-red)" : pitchOk ? "var(--wl-green)" : "var(--wl-orange)";
+
+    // Rückansicht: rechte Seite höher => Bild gegen den Uhrzeigersinn drehen
+    const rollVis = -clampVis(a.roll);
+    const rollLowRight = a.roll > 0 ? false : true; // tiefe Seite
+    const rollLabel = rollOk
+      ? `<text x="180" y="186" class="gtxt" text-anchor="middle">waagerecht ✓</text>`
+      : this._liftLabel(res.rollLift, rollLowRight ? "right" : "left");
+
+    // Seitenansicht: Front (rechts im Bild) höher => gegen den Uhrzeigersinn
+    const pitchVis = -clampVis(a.pitch);
+    const pitchLowFront = a.pitch < 0;
+    const pitchLabel = pitchOk
+      ? `<text x="180" y="186" class="gtxt" text-anchor="middle">waagerecht ✓</text>`
+      : this._liftLabel(res.pitchLift, pitchLowFront ? "right" : "left");
+
+    return `
+      <div class="panel">
+        <div class="ptitle">Rückansicht</div>
+        <div class="angle">${ANGLE_ICON} ${fmt(Math.abs(a.roll))}°</div>
+        <svg viewBox="0 0 360 200" class="scene">
+          <text x="14" y="40" class="side">Links</text>
+          <text x="346" y="40" class="side" text-anchor="end">Rechts</text>
+          <g transform="rotate(${rollVis} 180 150)">
+            <rect x="-300" y="150" width="960" height="200" fill="${rollCol}"/>
+            ${REAR_VAN}
+          </g>
+          ${rollLabel}
+        </svg>
+      </div>
+      <div class="panel">
+        <div class="ptitle">Seitenansicht</div>
+        <div class="angle">${ANGLE_ICON} ${fmt(Math.abs(a.pitch))}°</div>
+        <svg viewBox="0 0 360 200" class="scene">
+          <text x="14" y="40" class="side">Hinten</text>
+          <text x="346" y="40" class="side" text-anchor="end">Vorne</text>
+          <g transform="rotate(${pitchVis} 180 150)">
+            <rect x="-300" y="150" width="960" height="200" fill="${pitchCol}"/>
+            ${SIDE_VAN}
+          </g>
+          ${pitchLabel}
+        </svg>
+      </div>`;
+  }
+
+  _liftLabel(cm, side) {
+    const x = side === "right" ? 340 : 20;
+    const anchor = side === "right" ? "end" : "start";
+    const arrowX = side === "right" ? x - 6 : x + 6;
+    const textX = side === "right" ? x - 26 : x + 26;
+    return `
+      <g class="lift">
+        <path d="M${arrowX} 194 v-18 m-8 8 l8 -8 l8 8" stroke="#fff" stroke-width="4" fill="none"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="${textX}" y="190" class="gtxt" text-anchor="${anchor}">${fmt(cm)} cm</text>
+      </g>`;
+  }
+
+  /* ---------- Draufsicht ---------- */
+  _topView(a, res) {
+    const c = this._cfg;
+    // Blase wandert zur höheren Seite
+    let bx = a.roll / c.bubble_range, by = -a.pitch / c.bubble_range;
+    const m = Math.hypot(bx, by);
+    if (m > 1) { bx /= m; by /= m; }
+    const R = 52;
+    const cx = 180 + bx * R, cy = 175 + by * R;
+
+    const cell = (k, x, y, anchor) => {
+      const v = res.lift[k];
+      const col = this._color(res, v);
+      const val = v < c.min_lift ? "0,0" : fmt(v);
+      const arrow = v < c.min_lift ? "" : " ↑";
+      return `<text x="${x}" y="${y}" class="topval" text-anchor="${anchor}" fill="${col}">${val} cm${arrow}</text>`;
+    };
+
+    return `
+      <div class="panel">
+        <div class="angle">Längs ${fmt(a.pitch)}° · Quer ${fmt(a.roll)}°</div>
+        <svg viewBox="0 0 360 350" class="scene top">
+          <text x="180" y="20" class="side" text-anchor="middle">Vorne</text>
+          <text x="180" y="342" class="side" text-anchor="middle">Hinten</text>
+          <!-- Fahrzeugumriss -->
+          <rect x="125" y="30" width="110" height="292" rx="22" class="outline"/>
+          <rect x="135" y="40" width="90" height="34" rx="10" class="outline thin"/>
+          ${["fl", "fr", "rl", "rr"].map((k) => {
+            const x = k[1] === "l" ? 113 : 231;
+            const y = k[0] === "f" ? 72 : 238;
+            return `<rect x="${x}" y="${y}" width="16" height="40" rx="4" fill="${this._color(res, res.lift[k])}"/>`;
+          }).join("")}
+          ${cell("fl", 104, 98, "end")}
+          ${cell("fr", 256, 98, "start")}
+          ${cell("rl", 104, 264, "end")}
+          ${cell("rr", 256, 264, "start")}
+          <!-- Libelle -->
+          <circle cx="180" cy="175" r="${R + 12}" class="vial"/>
+          <circle cx="180" cy="175" r="${(c.tolerance / c.bubble_range) * R + 9}" class="target"/>
+          <line x1="180" y1="${175 - R - 12}" x2="180" y2="${175 + R + 12}" class="cross"/>
+          <line x1="${180 - R - 12}" y1="175" x2="${180 + R + 12}" y2="175" class="cross"/>
+          <circle cx="${cx}" cy="${cy}" r="9" fill="${res.level ? "var(--wl-green)" : "var(--wl-bubble)"}"/>
+        </svg>
+      </div>`;
+  }
+
+  _status(res) {
+    const c = this._cfg;
+    if (res.tooSteep) {
+      return `<div class="status red">Zu steil für ${fmt(c.max_wedge, 0)} cm Keile – anderen Stellplatz suchen</div>`;
+    }
+    if (res.level) return `<div class="status green">✓ Steht waagerecht</div>`;
+    const list = Object.keys(res.lift)
+      .filter((k) => res.lift[k] >= c.min_lift)
+      .sort((x, y) => res.lift[y] - res.lift[x])
+      .map((k) => `<div class="li"><span>${WHEEL_NAMES[k]}</span><b>${fmt(res.lift[k])} cm</b></div>`);
+    if (!list.length) return `<div class="status green">✓ Fast waagerecht – Keile nicht nötig</div>`;
+    return `<div class="status orange"><div class="sh">Keile unterlegen</div>${list.join("")}</div>`;
+  }
+}
+
+/* ---------- Grafiken (eigene, schlichte Silhouetten) ---------- */
+
+const ANGLE_ICON = `<svg viewBox="0 0 20 16" class="aicon"><path d="M2 2 V14 H18 M2 9 A6 6 0 0 1 8 14" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
+
+// Teilintegrierter von hinten, steht mit den Rädern auf y=150, Mitte x=180
+const REAR_VAN = `
+  <g class="van">
+    <rect x="160" y="44" width="40" height="8" rx="2" class="vdark"/>
+    <rect x="122" y="52" width="116" height="86" rx="12" class="vbody"/>
+    <rect x="150" y="64" width="60" height="30" rx="5" class="vwin"/>
+    <rect x="128" y="100" width="9" height="24" rx="2" class="vlight"/>
+    <rect x="223" y="100" width="9" height="24" rx="2" class="vlight"/>
+    <rect x="160" y="112" width="40" height="10" rx="2" class="vdark"/>
+    <rect x="118" y="130" width="124" height="9" rx="3" class="vdark"/>
+    <rect x="132" y="137" width="24" height="13" rx="3" class="vtire"/>
+    <rect x="204" y="137" width="24" height="13" rx="3" class="vtire"/>
+  </g>`;
+
+// Teilintegrierter von der Seite, Heck links, Front rechts
+const SIDE_VAN = `
+  <g class="van">
+    <path d="M62 136 V66 Q62 56 72 56 H252 Q262 56 268 66 L284 100 Q300 104 302 116 V136 Z" class="vbody"/>
+    <path d="M262 64 L280 100 H262 Z" class="vwin"/>
+    <rect x="82" y="72" width="44" height="24" rx="4" class="vwin"/>
+    <rect x="196" y="72" width="40" height="24" rx="4" class="vwin"/>
+    <rect x="146" y="70" width="28" height="60" rx="4" class="vdoor"/>
+    <rect x="62" y="128" width="240" height="8" class="vdark"/>
+    <circle cx="112" cy="137" r="14" class="vtire"/>
+    <circle cx="112" cy="137" r="6" class="vhub"/>
+    <circle cx="258" cy="137" r="14" class="vtire"/>
+    <circle cx="258" cy="137" r="6" class="vhub"/>
+  </g>`;
+
+const STYLE = `
+  :host {
+    --wl-green: #2e9e44;
+    --wl-orange: #e58a1f;
+    --wl-red: #d33b3b;
+    --wl-bubble: #d8c6a4;
+  }
+  ha-card { padding: 12px 14px 14px; overflow: hidden; }
+  .head { display:flex; align-items:center; justify-content:center; margin-bottom:6px; }
+  .title { font-size: 1.15em; font-weight: 500; color: var(--primary-text-color); }
+  .tabs { display:flex; gap:6px; margin-bottom:6px; }
+  .tabs button {
+    flex:1; border:none; background:transparent; padding:8px 4px; cursor:pointer;
+    font: inherit; font-size: .95em; color: var(--secondary-text-color);
+    border-bottom: 2px solid transparent;
+  }
+  .tabs button.on { color: var(--primary-text-color); font-weight:600; border-bottom-color: var(--primary-color, #03a9f4); }
+  .panel { position:relative; margin-top:6px; }
+  .ptitle { font-weight:600; color: var(--primary-text-color); }
+  .angle { display:flex; align-items:center; gap:6px; color: var(--secondary-text-color); font-size:.95em; margin-top:2px; }
+  .aicon { width:18px; height:14px; }
+  .scene { width:100%; display:block; border-radius: 6px; }
+  .side { font-size:12px; fill: var(--secondary-text-color); }
+  .gtxt { font-size:16px; font-weight:600; fill:#fff; }
+  .vbody { fill:#8d8d8d; }
+  .vdark { fill:#6a6a6a; }
+  .vwin { fill:#d9d9d9; }
+  .vdoor { fill:#7b7b7b; }
+  .vlight { fill:#b85a5a; }
+  .vtire { fill:#3a3a3a; }
+  .vhub { fill:#9a9a9a; }
+  .outline { fill:none; stroke: var(--secondary-text-color); stroke-width:2; opacity:.55; }
+  .outline.thin { stroke-width:1.2; }
+  .vial { fill: rgba(127,127,127,.08); stroke: var(--secondary-text-color); stroke-width:1.5; opacity:.8; }
+  .target { fill:none; stroke: var(--wl-green); stroke-width:1.5; stroke-dasharray:3 3; }
+  .cross { stroke: var(--secondary-text-color); stroke-width:1.2; opacity:.6; }
+  .topval { font-size:17px; font-weight:600; }
+  .status { margin-top:10px; padding:10px 12px; border-radius:8px; color:#fff; font-size:.95em; line-height:1.5; }
+  .status .sh { font-weight:600; margin-bottom:2px; }
+  .status .li { display:flex; justify-content:space-between; border-top:1px solid rgba(255,255,255,.25); padding:3px 0; }
+  .status.green { background: var(--wl-green); }
+  .status.orange { background: var(--wl-orange); }
+  .status.red { background: var(--wl-red); }
+  .na { padding:30px; text-align:center; color: var(--secondary-text-color); }
+`;
+
+/* ---------- Einstellungs-Editor für Home Assistant ---------- */
+
+const num = (min, max, step, unit) => ({
+  number: { min, max, step, mode: "box", unit_of_measurement: unit },
+});
+
+const EDITOR_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  {
+    type: "expandable", title: "Sensoren", flatten: true, expanded: true,
+    schema: [
+      { name: "pitch_entity", required: true, selector: { entity: { domain: "sensor" } } },
+      { name: "roll_entity", required: true, selector: { entity: { domain: "sensor" } } },
+      { name: "invert_pitch", selector: { boolean: {} } },
+      { name: "invert_roll", selector: { boolean: {} } },
+    ],
+  },
+  {
+    type: "expandable", title: "Wohnmobil", flatten: true, expanded: true,
+    schema: [
+      { name: "wheelbase", selector: num(150, 700, 1, "cm") },
+      { name: "track", selector: num(100, 260, 1, "cm") },
+    ],
+  },
+  {
+    type: "expandable", title: "Keile & Toleranz", flatten: true,
+    schema: [
+      { name: "max_wedge", selector: num(1, 30, 0.5, "cm") },
+      { name: "min_lift", selector: num(0, 5, 0.1, "cm") },
+      { name: "tolerance", selector: num(0, 3, 0.1, "°") },
+    ],
+  },
+  {
+    type: "expandable", title: "Darstellung", flatten: true,
+    schema: [
+      { name: "default_view", selector: { select: { mode: "dropdown", options: [
+        { value: "overview", label: "Rück- & Seitenansicht" },
+        { value: "top", label: "Draufsicht" },
+      ] } } },
+      { name: "exaggerate", selector: num(1, 10, 0.5, "x") },
+      { name: "bubble_range", selector: num(0.5, 10, 0.5, "°") },
+    ],
+  },
+];
+
+const EDITOR_LABELS = {
+  title: "Titel",
+  pitch_entity: "Sensor Längsneigung",
+  roll_entity: "Sensor Querneigung",
+  invert_pitch: "Längsneigung umkehren",
+  invert_roll: "Querneigung umkehren",
+  wheelbase: "Radstand",
+  track: "Spurbreite",
+  max_wedge: "Höchste Keilstufe",
+  min_lift: "Kleinste angezeigte Keilhöhe",
+  tolerance: "Toleranz „waagerecht“",
+  default_view: "Startansicht",
+  exaggerate: "Neigung im Bild übertreiben",
+  bubble_range: "Blase am Rand ab",
+};
+
+const EDITOR_HELPERS = {
+  invert_pitch: "Einschalten, wenn bei höherer Front ein negativer Wert kommt",
+  invert_roll: "Einschalten, wenn bei höherer rechter Seite ein negativer Wert kommt",
+  wheelbase: "Abstand Vorder- zu Hinterachse (Tessoro 488: 395 cm)",
+  track: "Abstand Reifenmitte links zu rechts an der Hinterachse",
+};
+
+class WomoLevelCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = config;
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  _render() {
+    if (!this._hass || !this._config) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (s) => EDITOR_LABELS[s.name] || s.name;
+      this._form.computeHelper = (s) => EDITOR_HELPERS[s.name];
+      this._form.addEventListener("value-changed", (ev) => {
+        this._config = ev.detail.value;
+        this.dispatchEvent(new CustomEvent("config-changed", {
+          detail: { config: this._config }, bubbles: true, composed: true,
+        }));
+      });
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass;
+    this._form.schema = EDITOR_SCHEMA;
+    this._form.data = { ...DEFAULTS, ...this._config };
+  }
+}
+
+if (!customElements.get("womo-level-card-editor")) {
+  customElements.define("womo-level-card-editor", WomoLevelCardEditor);
+}
+
+customElements.define("womo-level-card", WomoLevelCard);
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "womo-level-card",
+  name: "Womo Wasserwaage",
+  description: "Rück-, Seiten- und Draufsicht mit Keilhöhen pro Rad",
+});
+
+
+const PRESETS = {
+  tessoro488: { title: "Benimar Tessoro 488", wheelbase: 395, track: 170 },
+};
+const BASE = { max_wedge: 10, min_lift: 0.5, tolerance: 0.3, default_view: "overview",
+               exaggerate: 4, bubble_range: 3, invert_pitch: false, invert_roll: false };
+const NUMS = ["wheelbase","track","max_wedge","min_lift","tolerance","exaggerate","bubble_range"];
+const KEY = "womo-level-sim-config";
+
+const $ = (id) => document.getElementById(id);
+const card = $("card");
+let cfg;
+
+function load() {
+  try { const s = localStorage.getItem(KEY); if (s) return JSON.parse(s); } catch (e) {}
+  return { preset: "tessoro488", ...BASE, ...PRESETS.tessoro488 };
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} }
+
+function fillForm() {
+  $("preset").value = cfg.preset || "custom";
+  for (const k of ["title","default_view",...NUMS]) $(k).value = cfg[k];
+  $("invert_pitch").checked = !!cfg.invert_pitch;
+  $("invert_roll").checked = !!cfg.invert_roll;
+}
+
+function readForm() {
+  cfg.title = $("title").value;
+  cfg.default_view = $("default_view").value;
+  for (const k of NUMS) { const v = parseFloat($(k).value); if (isFinite(v)) cfg[k] = v; }
+  cfg.invert_pitch = $("invert_pitch").checked;
+  cfg.invert_roll = $("invert_roll").checked;
+  const p = PRESETS[cfg.preset];
+  if (p && (cfg.wheelbase !== p.wheelbase || cfg.track !== p.track)) { cfg.preset = "custom"; $("preset").value = "custom"; }
+}
+
+function yaml() {
+  const lines = [
+    "type: custom:womo-level-card",
+    `title: ${cfg.title || "Wasserwaage"}`,
+    "pitch_entity: sensor.womo_level_neigung_laengs",
+    "roll_entity: sensor.womo_level_neigung_quer",
+    `wheelbase: ${cfg.wheelbase}`,
+    `track: ${cfg.track}`,
+    `max_wedge: ${cfg.max_wedge}`,
+    `min_lift: ${cfg.min_lift}`,
+    `tolerance: ${cfg.tolerance}`,
+    `default_view: ${cfg.default_view}`,
+    `exaggerate: ${cfg.exaggerate}`,
+    `bubble_range: ${cfg.bubble_range}`,
+  ];
+  if (cfg.invert_pitch) lines.push("invert_pitch: true");
+  if (cfg.invert_roll) lines.push("invert_roll: true");
+  return lines.join("\n");
+}
+
+function applyConfig() {
+  const { preset, ...c } = cfg;
+  card.setConfig({ pitch_entity: "sensor.p", roll_entity: "sensor.r", ...c });
+  $("yaml").textContent = yaml();
+  save();
+  updAngles();
+}
+
+const p = $("p"), r = $("r");
+let wobble = null, base = null;
+function updAngles(dp = 0, dr = 0) {
+  const pv = (+p.value + dp).toFixed(2), rv = (+r.value + dr).toFixed(2);
+  $("po").textContent = Number(p.value).toFixed(1) + "°";
+  $("ro").textContent = Number(r.value).toFixed(1) + "°";
+  card.hass = { states: { "sensor.p": { state: pv }, "sensor.r": { state: rv } } };
+}
+p.oninput = r.oninput = () => updAngles();
+document.querySelectorAll("button[data-p]").forEach((b) => b.onclick = () => { p.value = b.dataset.p; r.value = b.dataset.r; updAngles(); });
+$("wobble").onclick = () => {
+  if (wobble) { clearInterval(wobble); wobble = null; $("wobble").textContent = "Leute laufen im Womo"; updAngles(); return; }
+  $("wobble").textContent = "Stillstehen";
+  wobble = setInterval(() => updAngles((Math.random() - .5) * .5, (Math.random() - .5) * .7), 300);
+};
+
+$("preset").onchange = () => {
+  cfg.preset = $("preset").value;
+  if (PRESETS[cfg.preset]) Object.assign(cfg, PRESETS[cfg.preset]);
+  fillForm(); applyConfig();
+};
+document.querySelectorAll(".box input, .box select").forEach((el) => {
+  if (el.id === "p" || el.id === "r" || el.id === "preset") return;
+  el.addEventListener("input", () => { readForm(); applyConfig(); });
+});
+$("reset").onclick = () => {
+  const key = PRESETS[cfg.preset] ? cfg.preset : "tessoro488";
+  cfg = { preset: key, ...BASE, ...PRESETS[key] }; fillForm(); applyConfig();
+};
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(yaml()); $("copied").textContent = "Kopiert ✓"; }
+  catch (e) {
+    const range = document.createRange(); range.selectNodeContents($("yaml"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    $("copied").textContent = "Markiert – jetzt mit Cmd/Strg+C kopieren";
+  }
+  setTimeout(() => $("copied").textContent = "", 3000);
+};
+if (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) document.body.classList.add("dark");
+$("dark").onclick = () => document.body.classList.toggle("dark");
+
+cfg = load();
+fillForm();
+applyConfig();
+</script>
+</body></html>
