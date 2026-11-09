@@ -76,7 +76,8 @@ python3 build_simulator.py
 
 - [x] Dashboard-Karte mit Einstellungs-Editor
 - [x] Simulator-Webseite mit Fahrzeug-Konfiguration
-- [ ] ESPHome-Konfiguration (ESP32 + MPU6050, Kalibrier-Taste)
+- [ ] Sensor: Integration des **Xparkle RVS01** über das Bluetooth des Raspberry Pi 4 – siehe [Plan](docs/xparkle-integration.md)
+- [ ] Alternative ohne Kaufgerät: ESPHome-Konfiguration (ESP32 + MPU6050, Kalibrier-Taste)
 - [ ] Installationsanleitung
 
 ## Weitere Projekte
