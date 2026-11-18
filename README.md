@@ -1,5 +1,7 @@
 # Digitale Wasserwaage für das Wohnmobil – Home Assistant
 
+🇩🇪 Deutsch · [🇬🇧 English](README_EN.md)
+
 Eigene Lovelace-Karte für Home Assistant, die zeigt, wie schief das Wohnmobil steht
 und **wie viele Zentimeter Keil unter welches Rad** gehören.
 
